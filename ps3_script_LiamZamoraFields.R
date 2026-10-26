@@ -67,5 +67,30 @@ head(can_gas_q)
 
 can_gas_q |> autoplot(Volume)
 
+#AutoPlot
 
+retail_ts |>
+  autoplot(sales) +
+  labs(
+    title = "U.S. Retail and Food Services Sales",
+    subtitle = "Seasonally adjusted vs. not seasonally adjusted",
+    x = NULL, y = "Millions of dollars", color = NULL
+  ) +
+  theme_minimal()
+
+#The two series follow the same tend. The NSA series has peaks and valleys at the same time every year.
+#The seasonaly adjusted series does not have this pattern. Instead, it appears to stay near the mean 
+#of the NSA series for a given period.
+
+can_gas |>
+  autoplot(Volume) +
+  geom_smooth()+
+  labs(
+    title = "Canadian Gas Production Volume",
+    x = NULL, y = "Billions of Cubic Meters", color = NULL
+  ) +
+  theme_minimal()
+
+#I added a trend line to the autopilot in order to get a clearer view of that trend through the seasonality
+#of the data.
 
