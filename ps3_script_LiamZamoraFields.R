@@ -192,6 +192,112 @@ retail_ts |>
 #The NSA series is significantly more volatile than the SA series. The SA series is 
 #much smoother. This is because of the seasonal peaks and valleys in the NSA series.
 
+##Part 4
+
+retail_ts |>
+  filter(series_id == "RSAFSNA") |>
+  gg_season(sales) +
+  labs(
+    title = "Seasonal Pattern in NSA Retail Sales",
+    y = "Millions of dollars"
+  ) +
+  theme_minimal()
+
+retail_ts |>
+  filter(series_id == "RSAFS") |>
+  gg_season(sales) +
+  labs(
+    title = "No Seasonal Pattern in SA Retail Sales",
+    y = "Millions of dollars"
+  ) +
+  theme_minimal()
+
+##In the NSA series, excluding 2020, we see a consistent repeated pattern that occurs every year. 
+#The SA series does not have this pattern, it is much more stable and smooth, almost flat, with small growth.
 
 
+can_gas |>
+  gg_season(log_volume) +
+  labs(
+    title = "Seasonal Pattern in Canadian Gas Production",
+    y = "Log Billions of Cubic Meters") +  
+  theme_minimal()
+
+#The winter months seem to regularly be the peak of gas production, while the summer months are the lowest.
+#This is likely do to natural gas creating energy to power Canada's heaters all winter.
+
+can_gas |>
+  gg_subseries(log_volume) +
+  labs(
+    title = "Subseries Plot: Canadian Gas Production",
+    y = "log(Volume)"
+  ) 
+
+retail_nsa_x13 <- retail_ts |>
+  filter(series_id == "RSAFSNA") |>
+  model(x13 = X_13ARIMA_SEATS(sales)) |>
+  components()
+
+retail_nsa_x13 |> autoplot()
+
+#December has the strongest seasonal effect at 1.2. Sales are about 20% higher than trend in that month.
+#The size of seasonal swings appears to be shrinking over time.
+
+sa_compare <- retail_nsa_x13 |>
+  as_tibble() |>
+  select(Month, mine = season_adjust) |>
+  left_join(
+    retail_ts |>
+      filter(series_id == "RSAFS") |>
+      as_tibble() |>
+      transmute(Month, census = sales),
+    by = "Month"
+  ) |>
+  mutate(pct_diff = 100 * (log(mine) - log(census)))
+
+sa_compare |>
+  ggplot(aes(x = Month, y = pct_diff)) +
+  geom_line() +
+  labs(
+    title = "My X-13 Seasonal Adjustment Minus the Census Bureau's",
+    x = NULL, y = "Difference (%)"
+  ) +
+  theme_minimal()
+
+#In general the match between our version of X13ARIMA and the Census Bureau's version is quite close.
+#The difference is usually less than 1%. The largest difference occurs in 2020 thanks to the pandemic.
+
+#LTSD
+can_gas_fit <- can_gas |>
+  model(TSLM(log_volume ~ trend() + season()))
+
+report(can_gas_fit)
+
+can_gas_fit |>
+  tidy() |>
+  select(term, estimate, std.error, statistic, p.value) |>
+  knitr::kable(digits = 3)
+
+#The approximate average monthly growth rate is 0.4%. June has the most significant seasonal effect.
+
+can_gas_fit |>
+  augment() |>
+  ggplot(aes(x = Month)) +
+  geom_line(aes(y = log_volume, color = "Actual")) +
+  geom_line(aes(y = .fitted, color = "Fitted")) +
+  labs(title = "Linear Trend + Seasonal Dummies Fit: Canadian Gas Production",
+       y = "log(Volume)", color = NULL) +
+  theme_minimal()
+
+#The model does a good job at capturing the trend and seasonality between 1990 and around 2020. 
+#Pre 1990 the model's trend level is highly inaccurate. 
+
+can_gas_fit |> gg_tsresiduals()
+
+can_gas_fit |>
+  augment() |>
+  features(.innov, ljung_box, lag = 24)
+
+#These residuals are not white noise. The Ljung-Box test shows a p-value of 0.000, meaning 
+#that the residuals are not independent and that theres likely structure to model further.
 
