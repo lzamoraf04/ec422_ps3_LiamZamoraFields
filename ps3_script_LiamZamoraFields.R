@@ -298,6 +298,52 @@ can_gas_fit |>
   augment() |>
   features(.innov, ljung_box, lag = 24)
 
-#These residuals are not white noise. The Ljung-Box test shows a p-value of 0.000, meaning 
+#These residuals are not white noise. The Ljung-Box test shows a p-value of ~0.000, meaning 
 #that the residuals are not independent and that theres likely structure to model further.
 
+#Model Evaluation:
+
+gas_cv_fc <- can_gas |>
+  select(Month, Volume) |>
+  stretch_tsibble(.init = 240, .step = 1) |>
+  model(snaive = SNAIVE(Volume),
+        tslm   = TSLM(log(Volume) ~ trend() + season())) |>
+  forecast(h = 1)
+
+gas_cv_fc |>
+  accuracy(can_gas, measures = list(MAE = MAE, RMSE = RMSE))
+
+#The SNAIVE model has a lower MAE and RMSE than the TSLM model at 0.562 and 0.702 respectively.
+#Compared to the TSLM model which has an MAE of 4.01 and a RMSE of 4.36. The SNAIVE model is 
+#clearly the better model here, both metrics agree.
+
+errs <- gas_cv_fc |>
+  as_tibble() |>
+  left_join(as_tibble(can_gas) |> select(Month, actual = Volume),
+            by = "Month") |>
+  mutate(e = actual - .mean) |>
+  select(Month, .model, e) |>
+  pivot_wider(names_from = .model, values_from = e) |>
+  na.omit()
+
+forecast::dm.test(errs$snaive, errs$tslm, h = 1, power = 1)
+
+#The DM statistic is -31.278 with a p-value of 0.00. 
+#Reject the null that the models have equal forecast accuracy.
+
+gas_cv_fc_2 <- can_gas |>
+  select(Month, Volume) |>
+  slide_tsibble(.size = 240, .step = 1) |>
+  model(snaive = SNAIVE(Volume),
+        tslm   = TSLM(log(Volume) ~ trend() + season())) |>
+  forecast(h = 1)
+
+gas_cv_fc_2 |>
+  accuracy(can_gas, measures = list(MAE = MAE, RMSE = RMSE))
+
+#SNAIVE: MAE = 0.562, RMSE = 0.702
+#TSLM: MAE = 2.09, RMSE = 2.42
+
+#The accuracy of TSLM has improved significantly with the sliding window method. 
+#This is because old data is being dropped from the model, where residuals were not independent and the model
+#was highly inaccurate.
